@@ -2,18 +2,15 @@ package com.bank.models;
 
 import java.math.BigDecimal;
 
-import com.bank.utils.ConsoleLogger;
 import com.bank.utils.TransactionType;
 
 public class Person extends Customer {
 	private String fullName;
-	protected ConsoleLogger consoleLogger;
 
 	public Person(Integer id, Account account, String fullName) {
 		super(id, account);
 
 		this.fullName = fullName;
-		consoleLogger = new ConsoleLogger();
 	}
 
 	public String getFullName() {
@@ -41,24 +38,16 @@ public class Person extends Customer {
 				synchronized (account) {
 					consoleLogger.log(String.format("Account with id %d started in transaction of type %s  for %.2f",
 							account.getId(), type.toString(), amount));
-					if (type.equals(TransactionType.CREDIT)) {
-						account.setAmount(account.getAmount().subtract(amount));
+					consoleLogger.log(
+							String.format("Attempting to acquire account with id %d", customer.getAccount().getId()));
 
-						consoleLogger.log(String.format("Attempting to acquire account with id %d",
-								customer.getAccount().getId()));
-
-						synchronized (customerAccount) {
+					synchronized (customerAccount) {
+						if (type.equals(TransactionType.CREDIT)) {
+							account.setAmount(account.getAmount().subtract(amount));
 							customerAccount.setAmount(customerAccount.getAmount().add(amount));
-						}
-					} else {
-						account.setAmount(account.getAmount().add(amount));
-
-						consoleLogger.log(String.format("Attempting to acquire account with id %d",
-								customer.getAccount().getId()));
-
-						synchronized (customerAccount) {
+						} else {
+							account.setAmount(account.getAmount().add(amount));
 							customerAccount.setAmount(customerAccount.getAmount().subtract(amount));
-
 						}
 					}
 
@@ -73,7 +62,6 @@ public class Person extends Customer {
 	@Override
 	public void makeTransactionViaAccountLockPriority(Customer customer, BigDecimal amount, TransactionType type) {
 		new Thread() {
-
 			@Override
 			public void run() {
 				Account priorityAccount = account.getId() < customer.getAccount().getId() ? account
@@ -92,29 +80,22 @@ public class Person extends Customer {
 				synchronized (priorityAccount) {
 					consoleLogger.log(String.format("Account with id %d started in transaction of type %s for %.2f",
 							priorityAccount.getId(), type.toString(), amount));
-					if (type.equals(TransactionType.CREDIT)) {
-						priorityAccount.setAmount(priorityAccount.getAmount().subtract(amount));
+					consoleLogger.log(String.format("Attempting to acquire account with id %d", secondAccount.getId()));
 
-						consoleLogger
-								.log(String.format("Attempting to acquire account with id %d", secondAccount.getId()));
-
-						synchronized (customer.getAccount()) {
-							secondAccount.setAmount(secondAccount.getAmount().add(amount));
-						}
-					} else {
-						priorityAccount.setAmount(priorityAccount.getAmount().add(amount));
-
-						consoleLogger.log(String.format("Attempting to acquire account with id %d",
-								customer.getAccount().getId()));
-
-						synchronized (secondAccount) {
-							secondAccount.setAmount(secondAccount.getAmount().subtract(amount));
+					synchronized (secondAccount) {
+						if (type.equals(TransactionType.CREDIT)) {
+							account.setAmount(account.getAmount().subtract(amount));
+							customer.getAccount().setAmount(customer.getAccount().getAmount().add(amount));
+						} else {
+							account.setAmount(account.getAmount().add(amount));
+							customer.getAccount().setAmount(customer.getAccount().getAmount().subtract(amount));
 						}
 					}
-					consoleLogger.log(String.format(
-							"Account with id %d finished a transaction of type %s with accound with id %d",
-							priorityAccount.getId(), type.toString(), secondAccount.getId()));
 				}
+
+				consoleLogger.log(
+						String.format("Account with id %d finished a transaction of type %s with accound with id %d",
+								account.getId(), type.toString(), customer.getAccount().getId()));
 			}
 		}.start();
 	}
@@ -122,10 +103,8 @@ public class Person extends Customer {
 	@Override
 	public void makeTransactionViaReentrantLock(Customer customer, BigDecimal amount, TransactionType type) {
 		new Thread() {
-
 			@Override
 			public void run() {
-
 				try {
 					consoleLogger.log("Sleeping for 2 seconds.");
 					Thread.sleep(2000);
@@ -136,36 +115,34 @@ public class Person extends Customer {
 
 				if (lock().tryLock()) {
 					try {
-						try {
-							if (customer.lock().tryLock()) {
-								consoleLogger.log(String.format("Account with id %d started in transaction of type %s",
-										account.getId(), type.toString()));
+						consoleLogger.log(String.format("Account with id %d started in transaction of type %s",
+								account.getId(), type.toString()));
+						consoleLogger.log(String.format("Attempting to acquire account with id %d",
+								customer.getAccount().getId()));
+						if (customer.lock().tryLock()) {
+							try {
 								if (type.equals(TransactionType.CREDIT)) {
 									account.setAmount(account.getAmount().subtract(amount));
-
-									consoleLogger.log(String.format("Attempting to acquire account with id %d",
-											customer.getAccount().getId()));
-
 									customerAccount.setAmount(customerAccount.getAmount().add(amount));
 								} else {
 									account.setAmount(account.getAmount().add(amount));
-
-									consoleLogger.log(String.format("Attempting to acquire account with id %d",
-											customer.getAccount().getId()));
-
 									customerAccount.setAmount(customerAccount.getAmount().subtract(amount));
 								}
 
 								consoleLogger.log(String.format(
 										"Account with id %d finished a transaction of type %s with accound with id %d",
 										account.getId(), type.toString(), customerAccount.getId()));
+							} finally {
+								customer.lock().unlock();
 							}
-						} finally {
-							customer.lock().unlock();
+						} else {
+							consoleLogger.log("Transaction failed, try again.");
 						}
 					} finally {
 						lock().unlock();
 					}
+				} else {
+					consoleLogger.log("Transaction failed, try again.");
 				}
 			}
 		}.start();

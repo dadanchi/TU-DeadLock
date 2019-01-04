@@ -3,21 +3,24 @@ package com.bank.models;
 import java.math.BigDecimal;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.bank.utils.ConsoleLogger;
 import com.bank.utils.TransactionType;
 
-public abstract class Customer extends Thread {
+public abstract class Customer {
 	protected Integer id;
 	protected Account account;
+	
+	protected final ConsoleLogger consoleLogger;
 
 	private final ReentrantLock lock = new ReentrantLock();
 
 	public Customer(Integer id, Account account) {
-		super();
+		consoleLogger = new ConsoleLogger();
 		this.id = id;
 		this.account = account;
 	}
 
-	public Integer getID() {
+	public Integer getId() {
 		return id;
 	}
 
